@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management</title>
+    <style>
+        /* Add your styles here */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        th, td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+
+        .selected {
+            background-color: #ddd !important;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+
+        .search-bar {
+            margin-bottom: 20px;
+        }
+
+        .bulk-delete {
+            background-color: #ff0000;
+            color: #fff;
+            padding: 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="Search..." oninput="searchUsers()">
+        <button class="search-icon" onclick="searchUsers()">Search</button>
+    </div>
+    
+    <table id="userTable">
+        <thead>
+            <tr>
+                <th><input type="checkbox" id="selectAll" onclick="toggleSelectAll()"> Select All</th>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Table rows will be dynamically added using JavaScript -->
+        </tbody>
+    </table>
+
+    <div class="pagination">
+        <button class="first-page" onclick="navigatePage('first')">First</button>
+        <button class="previous-page" onclick="navigatePage('previous')">Previous</button>
+        <span id="currentPage">Page 1</span>
+        <button class="next-page" onclick="navigatePage('next')">Next</button>
+        <button class="last-page" onclick="navigatePage('last')">Last</button>
+    </div>
+
+    <button class="bulk-delete" onclick="deleteSelected()">Delete Selected</button>
+
+    <script>
+        let users = [];  // To store the original data
+        let currentPage = 1;
+        const pageSize = 10;
+
+        fetch('https://geektrust.s3-ap-southeast-1.amazonaws.com/adminui-problem/members.json')
+            .then(response => response.json())
+            .then(data => {
+                users = data;
+                displayUsers(users);
+            });
+
+        function displayUsers(usersToDisplay) {
+            const tableBody = document.querySelector('#userTable tbody');
+            tableBody.innerHTML = '';
+
+            const start = (currentPage - 1) * pageSize;
+            const end = start + pageSize;
+
+            for (let i = start; i < end && i < usersToDisplay.length; i++) {
+                const user = usersToDisplay[i];
+                const row = tableBody.insertRow();
+                row.innerHTML = `
+                    <td><input type="checkbox" class="user-checkbox" data-index="${i}" onclick="toggleSelectRow(${i})"></td>
+                    <td>${user.id}</td>
+                    <td contenteditable="true" oninput="updateUserData(${i}, 'name')">${user.name}</td>
+                    <td>${user.email}</td>
+                    <td contenteditable="true" oninput="updateUserData(${i}, 'role')">${user.role}</td>
+                    <td>
+                        <button class="edit" onclick="editRow(${i})">Edit</button>
+                        <button class="delete" onclick="deleteRow(${i})">Delete</button>
+                    </td>
+                `;
+            }
+
+            updatePagination();
+        }
+
+        function updatePagination() {
+            const totalPages = Math.ceil(users.length / pageSize);
+            const paginationText = `Page ${currentPage} of ${totalPages}`;
+            document.getElementById('currentPage').innerText = paginationText;
+
+            const previousButton = document.querySelector('.previous-page');
+            const nextButton = document.querySelector('.next-page');
+
+            previousButton.disabled = currentPage === 1;
+            nextButton.disabled = currentPage === totalPages;
+        }
+
+        function navigatePage(direction) {
+            const totalPages = Math.ceil(users.length / pageSize);
+
+            switch (direction) {
+                case 'first':
+                    currentPage = 1;
+                    break;
+                case 'previous':
+                    currentPage = Math.max(1, currentPage - 1);
+                    break;
+                case 'next':
+                    currentPage = Math.min(totalPages, currentPage + 1);
+                    break;
+                case 'last':
+                    currentPage = totalPages;
+                    break;
+            }
+
+            displayUsers(users);
+        }
+
+        function searchUsers() {
+            const searchInput = document.getElementById('searchInput');
+            const searchTerm = searchInput.value.toLowerCase();
+
+            const filteredUsers = users.filter(user =>
+                Object.values(user).some(value =>
+                    value.toString().toLowerCase().includes(searchTerm)
+                )
+            );
+
+            currentPage = 1;
+            displayUsers(filteredUsers);
+        }
+
+        function toggleSelectAll() {
+            const selectAllCheckbox = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('.user-checkbox');
+
+            checkboxes.forEach(checkbox => checkbox.checked = selectAllCheckbox.checked);
+        }
+
+        function toggleSelectRow(index) {
+            const checkbox = document.querySelector(`.user-checkbox[data-index="${index}"]`);
+            const row = checkbox.closest('tr');
+            row.classList.toggle('selected');
+        }
+
+        function deleteSelected() {
+            const selectedRows = document.querySelectorAll('.user-checkbox:checked');
+            const selectedIndices = Array.from(selectedRows).map(checkbox =>
+                parseInt(checkbox.dataset.index)
+            );
+
+            users = users.filter((user, index) => !selectedIndices.includes(index));
+            currentPage = 1;
+            displayUsers(users);
+        }
+
+        
+    function editRow(index) {
+        const row = document.querySelector(`#userTable tbody tr:nth-child(${index + 1})`);
+        const editButton = row.querySelector('.edit');
+        const nameCell = row.querySelector('td:nth-child(3)');
+        const roleCell = row.querySelector('td:nth-child(5)');
+
+        if (editButton.innerText === 'Edit') {
+            editButton.innerText = 'Save';
+            nameCell.contentEditable = true;
+            roleCell.contentEditable = true;
+        } else {
+            // Save changes and exit edit mode
+            editButton.innerText = 'Edit';
+            nameCell.contentEditable = false;
+            roleCell.contentEditable = false;
+
+            // Update the user data in the 'users' array
+            users[index].name = nameCell.innerText;
+            users[index].role = roleCell.innerText;
+        }
+    }
+
+    function deleteRow(index) {
+        const confirmation = confirm('Are you sure you want to delete this user?');
+        if (confirmation) {
+            users.splice(index, 1);
+            currentPage = 1;
+            displayUsers(users);
+        }
+    }
+
+        function updateUserData(index, property) {
+            // Additional logic for updating user data
+        }
+    </script>
+</body>
+</html>
